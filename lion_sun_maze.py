@@ -384,9 +384,9 @@ class AssetLibrary:
             if direction == RIGHT:
                 image = pygame.transform.flip(base, True, False)
             elif direction == UP:
-                image = pygame.transform.rotate(base, 90)
-            elif direction == DOWN:
                 image = pygame.transform.rotate(base, 270)
+            elif direction == DOWN:
+                image = pygame.transform.rotate(base, 90)
             else:
                 image = base
             self.cache[key] = image
@@ -1037,7 +1037,7 @@ class Game:
         pygame.draw.rect(surf, (15, 30, 55, 215), surf.get_rect(), border_radius=18)
         pygame.draw.rect(surf, (255, 190, 45, 230), surf.get_rect(), 2, border_radius=18)
 
-        title_surf = self.font_small.render("یادبود جاویدنامان (ملا پر!)", True, (255, 226, 91))
+        title_surf = self.font_persian.render("یادبود جاویدنامان (ملا پر!)"[::-1], True, (255, 226, 91))
         # Render Persian text using font_persian with reversed string for RTL
         name_surf = self.font_persian.render(self.active_javid_text[::-1], True, (242, 239, 221))
         if name_surf.get_width() > popup_width - 30:
