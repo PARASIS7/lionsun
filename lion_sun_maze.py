@@ -58,7 +58,50 @@ STOP = (0, 0)
 DIRECTIONS = (UP, LEFT, DOWN, RIGHT)
 
 
-# # = wall, . = sun, o = Iran power-up, P = player, 1..4 = enemies, = = gate.
+JAVID_NAMAN = [
+    "جاوید نام کیان پیرفلک با سن ۹ از ایذه کشته شده در ایذه",
+    "جاوید نام نیکا شاکرمی با سن ۱۷ از خرم‌آباد کشته شده در تهران",
+    "جاوید نام سارینا اسماعیل‌زاده با سن ۱۶ از کرج کشته شده در کرج",
+    "جاوید نام مهسا امینی با سن ۲۲ از سقز کشته شده در تهران",
+    "جاوید نام حمیدرضا روحی با سن ۱۹ از تهران کشته شده در تهران",
+    "جاوید نام محسن شکاری با سن ۲۳ از تهران کشته شده در تهران",
+    "جاوید نام مجیدرضا رهنورد با سن ۲۳ از مشهد کشته شده در مشهد",
+    "جاوید نام حدیث نجفی با سن ۲۲ از کرج کشته شده در کرج",
+    "جاوید نام جواد روحی با سن ۳۵ از آمل کشته شده در نوشهر",
+    "جاوید نام محمد حسینی با سن ۳۹ از کرج کشته شده در کرج",
+    "جاوید نام محمدمهدی کرمی با سن ۲۲ از کرج کشته شده در کرج",
+    "جاوید نام مهران سماک با سن ۲۷ از انزلی کشته شده در انزلی",
+    "جاوید نام عرشیا امام‌قلی‌زاده با سن ۱۶ از بوکان کشته شده در بوکان",
+    "جاوید نامیکا صمدی با سن ۳۹ از سنندج کشته شده در سنندج",
+]
+
+
+def load_high_score() -> int:
+    try:
+        if HIGH_SCORE_FILE.exists():
+            import json
+            data = json.loads(HIGH_SCORE_FILE.read_text(encoding="utf-8"))
+            return int(data.get("high_score", 0))
+    except Exception:
+        pass
+    return 0
+
+
+def save_high_score(score: int) -> None:
+    try:
+        import json
+        HIGH_SCORE_FILE.write_text(json.dumps({"high_score": score}), encoding="utf-8")
+    except Exception:
+        pass
+
+
+@dataclass
+class FloatingText:
+    x: float
+    y: float
+    text: str
+    timer: float = 1.0
+    color: tuple[int, int, int] = (255, 226, 91)
 # Spaces inside the maze are traversable but do not contain collectibles.
 PALACE_LEVEL = (
     "###################",
@@ -162,6 +205,8 @@ LEVELS = (
     LevelSpec("Kashi Palace", PALACE_LEVEL, (19, 92, 160), (34, 198, 195), (180, 111, 48)),
     LevelSpec("Copper Labyrinth", generate_labyrinth(37), (19, 116, 122), (69, 214, 175), (161, 91, 47)),
     LevelSpec("Crimson Citadel", generate_labyrinth(83), (116, 32, 69), (231, 91, 126), (191, 126, 58)),
+    LevelSpec("Sapphire Oasis", generate_labyrinth(142), (15, 78, 120), (32, 204, 215), (140, 95, 45)),
+    LevelSpec("Golden Empire", generate_labyrinth(256), (120, 75, 20), (255, 205, 50), (190, 110, 30)),
 )
 
 
@@ -332,13 +377,19 @@ class AssetLibrary:
         size = (max(1, round(surface.get_width() * scale)), max(1, round(surface.get_height() * scale)))
         return pygame.transform.smoothscale(surface, size)
 
-    def lion(self, frame: int, size: int, face_left: bool = False) -> pygame.Surface:
-        key = ("lion-left" if face_left else "lion-right", frame, size)
+    def lion(self, frame: int, size: int, direction: tuple[int, int] = LEFT) -> pygame.Surface:
+        key = ("lion", direction, frame, size)
         if key not in self.cache:
-            image = self.fit(self.lion_sources[frame], size)
-            # The generated source artwork faces left (head and sword on the
-            # left side), so only right-facing movement needs a horizontal flip.
-            self.cache[key] = image if face_left else pygame.transform.flip(image, True, False)
+            base = self.fit(self.lion_sources[frame], size)
+            if direction == RIGHT:
+                image = pygame.transform.flip(base, True, False)
+            elif direction == UP:
+                image = pygame.transform.rotate(base, 90)
+            elif direction == DOWN:
+                image = pygame.transform.rotate(base, 270)
+            else:
+                image = base
+            self.cache[key] = image
         return self.cache[key]
 
     def cleric(self, index: int, size: int, frightened: bool = False) -> pygame.Surface:
@@ -409,7 +460,7 @@ class Game:
         self.state = ScreenState.START
         self.previous_state = ScreenState.PLAYING
         self.score = 0
-        self.high_score = 0
+        self.high_score = load_high_score()
         self.lives = 3
         self.desired_direction = LEFT
         self.frightened_timer = 0.0
@@ -419,8 +470,8 @@ class Game:
         self.state_timer = 0.0
         self.animation_time = 0.0
         self.running = True
-        self.player_facing = RIGHT
-        self.tile_size = 32
+        self.player_facing = LEFT
+        self.floating_texts: list[FloatingText] = []
         self.board_origin = (0, 0)
         self.panel_rect = pygame.Rect(0, 0, 0, 0)
         self.background = pygame.Surface(self.screen.get_size())
@@ -607,6 +658,12 @@ class Game:
     def update(self, dt: float) -> None:
         self.animation_time += dt
         self.super_banner_timer = max(0.0, self.super_banner_timer - dt)
+
+        for ft in self.floating_texts[:]:
+            ft.timer -= dt
+            if ft.timer <= 0:
+                self.floating_texts.remove(ft)
+
         if self.state == ScreenState.DYING:
             self.state_timer -= dt
             if self.state_timer <= 0:
@@ -630,8 +687,10 @@ class Game:
         self.update_ghosts(dt)
         self.resolve_collisions()
 
+        self.high_score = max(self.high_score, self.score)
+        save_high_score(self.high_score)
+
         if not self.maze.pellets and not self.maze.power_pellets:
-            self.high_score = max(self.high_score, self.score)
             self.state = ScreenState.LEVEL_CLEAR if self.current_level + 1 < len(LEVELS) else ScreenState.WON
 
     @staticmethod
@@ -655,7 +714,7 @@ class Game:
             if not self.maze.passable(*forward_tile):
                 player.direction = STOP
 
-        if player.direction in (LEFT, RIGHT):
+        if player.direction != STOP:
             self.player_facing = player.direction
 
         self.advance_actor(player, player.speed * dt)
@@ -666,9 +725,11 @@ class Game:
         if tile in self.maze.pellets:
             self.maze.pellets.remove(tile)
             self.score += 10
+            self.floating_texts.append(FloatingText(float(tile[0]), float(tile[1]), "+10", color=(255, 238, 113)))
         if tile in self.maze.power_pellets:
             self.maze.power_pellets.remove(tile)
             self.score += 50
+            self.floating_texts.append(FloatingText(float(tile[0]), float(tile[1]), "+50", color=(255, 190, 45)))
             self.frightened_timer = 8.0
             self.frightened_chain = 0
             for ghost in self.ghosts:
@@ -753,6 +814,12 @@ class Game:
             return ghost.scatter_target if distance < 6 else (px, py)
         return ghost.scatter_target
 
+    def get_next_javid_nam(self) -> str:
+        if not hasattr(self, "_javid_pool") or not self._javid_pool:
+            self._javid_pool = list(JAVID_NAMAN)
+            random.shuffle(self._javid_pool)
+        return self._javid_pool.pop()
+
     def resolve_collisions(self) -> None:
         for ghost in self.ghosts:
             if ghost.mode == GhostMode.RESPAWNING:
@@ -763,9 +830,14 @@ class Game:
             distance = min(distance, math.hypot(wrapped_dx, self.player.y - ghost.y))
             if distance >= 0.68:
                 continue
-            if ghost.mode == GhostMode.FRIGHTENED or self.super_mode:
+            # When power-up (frightened_timer > 0) or super_mode is active, ghosts can NEVER kill player.
+            if ghost.mode == GhostMode.FRIGHTENED or self.frightened_timer > 0 or self.super_mode:
                 base_score = 500 if self.super_mode else 200
-                self.score += base_score * (2**self.frightened_chain)
+                pts = base_score * (2**self.frightened_chain)
+                self.score += pts
+                javid = self.get_next_javid_nam()
+                text = f"ملا پر! — {javid} به تو افتخار می‌کند"
+                self.floating_texts.append(FloatingText(float(ghost.x), float(ghost.y), text, timer=1.5, color=(255, 120, 120)))
                 self.frightened_chain = min(3, self.frightened_chain + 1)
                 ghost.mode = GhostMode.RESPAWNING
                 ghost.respawn_timer = 2.0
@@ -802,6 +874,7 @@ class Game:
         for ghost in self.ghosts:
             if ghost.mode != GhostMode.RESPAWNING:
                 self.draw_cleric_sprite(ghost)
+        self.draw_floating_texts()
         if self.super_mode:
             self.draw_super_screen_effect()
         self.draw_hud()
@@ -928,8 +1001,8 @@ class Game:
         size = max(74, int(self.tile_size * 2.55))
         moving = self.player.direction != STOP and self.state == ScreenState.PLAYING
         frame = int(self.animation_time * 7.5) % 2 if moving else 0
-        image = self.assets.lion(frame, size, self.player_facing == LEFT)
-        if self.super_mode:
+        image = self.assets.lion(frame, size, self.player_facing)
+        if self.super_mode or self.frightened_timer > 0:
             self.draw_super_aura(center, size)
         shadow = pygame.Rect(0, 0, int(image.get_width() * 0.72), max(6, int(image.get_height() * 0.18)))
         shadow.center = (center[0], center[1] + int(image.get_height() * 0.38))
@@ -937,6 +1010,15 @@ class Game:
         pygame.draw.ellipse(shadow_surface, (0, 0, 0, 105), shadow_surface.get_rect())
         self.screen.blit(shadow_surface, shadow)
         self.blit_center(image, center)
+
+    def draw_floating_texts(self) -> None:
+        for ft in self.floating_texts:
+            center = (
+                int(self.board_origin[0] + (ft.x + 0.5) * self.tile_size),
+                int(self.board_origin[1] + (ft.y + 0.5) * self.tile_size)
+            )
+            surf = self.font_small.render(ft.text, True, ft.color)
+            self.blit_center(surf, center)
 
     def draw_super_aura(self, center: tuple[int, int], size: int) -> None:
         """Draw the animated sun that completes the Lion & Sun emblem."""
