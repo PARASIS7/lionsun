@@ -472,6 +472,8 @@ class Game:
         self.running = True
         self.player_facing = LEFT
         self.floating_texts: list[FloatingText] = []
+        self.javid_popup_timer = 0.0
+        self.active_javid_text = ""
         self.board_origin = (0, 0)
         self.panel_rect = pygame.Rect(0, 0, 0, 0)
         self.background = pygame.Surface(self.screen.get_size())
@@ -658,6 +660,7 @@ class Game:
     def update(self, dt: float) -> None:
         self.animation_time += dt
         self.super_banner_timer = max(0.0, self.super_banner_timer - dt)
+        self.javid_popup_timer = max(0.0, self.javid_popup_timer - dt)
 
         for ft in self.floating_texts[:]:
             ft.timer -= dt
@@ -836,8 +839,9 @@ class Game:
                 pts = base_score * (2**self.frightened_chain)
                 self.score += pts
                 javid = self.get_next_javid_nam()
-                text = f"ملا پر! — {javid} به تو افتخار می‌کند"
-                self.floating_texts.append(FloatingText(float(ghost.x), float(ghost.y), text, timer=1.5, color=(255, 120, 120)))
+                self.active_javid_text = javid
+                self.javid_popup_timer = 5.0
+                self.floating_texts.append(FloatingText(float(ghost.x), float(ghost.y), "ملا پر!", color=(255, 120, 120), timer=0.8))
                 self.frightened_chain = min(3, self.frightened_chain + 1)
                 ghost.mode = GhostMode.RESPAWNING
                 ghost.respawn_timer = 2.0
@@ -875,6 +879,7 @@ class Game:
             if ghost.mode != GhostMode.RESPAWNING:
                 self.draw_cleric_sprite(ghost)
         self.draw_floating_texts()
+        self.draw_javid_popup()
         if self.super_mode:
             self.draw_super_screen_effect()
         self.draw_hud()
@@ -1019,6 +1024,29 @@ class Game:
             )
             surf = self.font_small.render(ft.text, True, ft.color)
             self.blit_center(surf, center)
+
+    def draw_javid_popup(self) -> None:
+        if self.javid_popup_timer <= 0 or not self.active_javid_text:
+            return
+        width, height = self.screen.get_size()
+        popup_width = min(680, width - 40)
+        popup_height = 84
+        popup_rect = pygame.Rect(20, 20, popup_width, popup_height)
+
+        surf = pygame.Surface((popup_width, popup_height), pygame.SRCALPHA)
+        pygame.draw.rect(surf, (15, 30, 55, 215), surf.get_rect(), border_radius=18)
+        pygame.draw.rect(surf, (255, 190, 45, 230), surf.get_rect(), 2, border_radius=18)
+
+        title_surf = self.font_small.render("یادبود جاویدنامان (ملا پر!)", True, (255, 226, 91))
+        # Render Persian text using font_persian with reversed string for RTL
+        name_surf = self.font_persian.render(self.active_javid_text[::-1], True, (242, 239, 221))
+        if name_surf.get_width() > popup_width - 30:
+            name_surf = pygame.transform.smoothscale(name_surf, (popup_width - 30, round(name_surf.get_height() * (popup_width - 30) / name_surf.get_width())))
+
+        surf.blit(title_surf, (15, 10))
+        surf.blit(name_surf, (15, 42))
+
+        self.screen.blit(surf, popup_rect.topleft)
 
     def draw_super_aura(self, center: tuple[int, int], size: int) -> None:
         """Draw the animated sun that completes the Lion & Sun emblem."""
